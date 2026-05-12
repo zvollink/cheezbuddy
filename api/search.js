@@ -11,72 +11,67 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: "ANTHROPIC_API_KEY environment variable is not set" });
   }
 
-  const system = `You are a price comparison assistant. Search for current Cheez-It Original crackers prices at major US retailers.
-After searching, respond with ONLY a valid raw JSON array — no markdown, no backticks, no explanation.
-Each object must have: retailer (string), price (number in USD), size (string, e.g. "9 oz"), pricePerOz (number, calculated), url (string, direct product URL), inStock (boolean).
-Find at least 6 retailers. Always include Walmart, Target, Amazon if available. Sort by pricePerOz ascending.`;
+  const headers = {
+    "Content-Type": "application/json",
+    "x-api-key": ANTHROPIC_API_KEY,
+    "anthropic-version": "2023-06-01",
+    "anthropic-beta": "web-search-2025-03-05",
+  };
 
-  const messages = [
-    {
-      role: "user",
-      content:
-        "Find current prices for Cheez-It Original crackers at Walmart, Target, Amazon, Kroger, Safeway, Costco, Sam's Club, and any other major US grocery or retail stores. Return ONLY the JSON array.",
-    },
-  ];
+  async function callClaude(body) {
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      const err = await r.text();
+      throw new Error(`Anthropic API returned ${r.status}: ${err}`);
+    }
+    return r.json();
+  }
+
+  function getText(content) {
+    return (content || [])
+      .filter((b) => b.type === "text")
+      .map((b) => b.text)
+      .join("")
+      .trim();
+  }
 
   try {
-    let result = null;
+    // ── Phase 1: Research with web search ──────────────────────────────────
+    // Let Claude narrate freely — no JSON pressure, just find the prices.
+    const messages = [
+      {
+        role: "user",
+        content:
+          "Search for the current retail prices of Cheez-It Original crackers at major US stores: Walmart, Target, Amazon, Kroger, Safeway, Costco, Sam's Club, and any others you find. For each one note the retailer, price, package size in oz, and the product URL.",
+      },
+    ];
 
-    for (let round = 0; round < 8 && !result; round++) {
-      const apiRes = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-beta": "web-search-2025-03-05",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 2000,
-          system,
-          tools: [{ type: "web_search_20250305", name: "web_search" }],
-          messages,
-        }),
+    for (let round = 0; round < 8; round++) {
+      const data = await callClaude({
+        model: "claude-sonnet-4-6",
+        max_tokens: 2000,
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
+        messages,
       });
 
-      if (!apiRes.ok) {
-        const errBody = await apiRes.text();
-        throw new Error(`Anthropic API returned ${apiRes.status}: ${errBody}`);
-      }
+      messages.push({ role: "assistant", content: data.content });
 
-      const data = await apiRes.json();
-
-      if (data.stop_reason === "end_turn") {
-        const text = (data.content || [])
-          .filter((b) => b.type === "text")
-          .map((b) => b.text)
-          .join("")
-          .trim()
-          .replace(/^```[\w]*\s*/m, "")
-          .replace(/\s*```$/m, "");
-        result = text;
-        break;
-      }
+      if (data.stop_reason === "end_turn") break;
 
       if (data.stop_reason === "tool_use") {
-        const assistantContent = (data.content || []).filter((b) => b.type !== "tool_result");
-        messages.push({ role: "assistant", content: assistantContent });
+        const toolUses = data.content.filter((b) => b.type === "tool_use");
+        const serverResults = data.content.filter((b) => b.type === "tool_result");
 
-        const serverToolResults = (data.content || []).filter((b) => b.type === "tool_result");
-        const toolUses = (data.content || []).filter((b) => b.type === "tool_use");
-
-        if (serverToolResults.length > 0) {
+        if (serverResults.length > 0) {
           messages.push({
             role: "user",
-            content: serverToolResults.map((r, idx) => ({
+            content: serverResults.map((r, i) => ({
               type: "tool_result",
-              tool_use_id: r.tool_use_id || (toolUses[idx] && toolUses[idx].id),
+              tool_use_id: r.tool_use_id || (toolUses[i] && toolUses[i].id),
               content: typeof r.content === "string" ? r.content : JSON.stringify(r.content),
             })),
           });
@@ -93,14 +88,33 @@ Find at least 6 retailers. Always include Walmart, Target, Amazon if available. 
       }
     }
 
-    if (!result) throw new Error("Search completed but no price data was returned");
+    // ── Phase 2: Format as JSON ────────────────────────────────────────────
+    // New call, no tools — Claude's only job is to emit a JSON array.
+    messages.push({
+      role: "user",
+      content:
+        "Using only the prices you just found above, output a JSON array and nothing else — no explanation, no markdown, no backticks. Each item: { \"retailer\": string, \"price\": number, \"size\": string, \"pricePerOz\": number, \"url\": string, \"inStock\": boolean }. Calculate pricePerOz from the price and size. Sort by pricePerOz ascending.",
+    });
 
-    const parsed = JSON.parse(result);
-    if (!Array.isArray(parsed)) throw new Error("Response was not a JSON array");
+    const formatData = await callClaude({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1500,
+      // No tools — forces a plain text response
+      messages,
+    });
+
+    const raw = getText(formatData.content);
+    const match = raw.match(/\[[\s\S]*\]/);
+    if (!match) throw new Error("Could not find a JSON array in the response");
+
+    const parsed = JSON.parse(match[0]);
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      throw new Error("Response was empty or not a JSON array");
+    }
 
     return res.status(200).json(parsed);
   } catch (e) {
-    console.error("CheezBuddy search error:", e);
+    console.error("CheezBuddy error:", e);
     return res.status(500).json({ error: e.message });
   }
 };

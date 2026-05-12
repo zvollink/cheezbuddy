@@ -379,7 +379,7 @@
       } catch (e) {
         errBox.textContent =
           '🧀 The cheese got away: ' + e.message +
-          ' — check your API key in Netlify env vars, then try again.';
+          ' — try again or check your Vercel environment variables.';
         errBox.style.display = 'block';
       } finally {
         clearInterval(loaderInterval);

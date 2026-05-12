@@ -37,7 +37,7 @@ Find at least 6 retailers. Always include Walmart, Target, Amazon if available. 
           "anthropic-beta": "web-search-2025-03-05",
         },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-sonnet-4-6",
           max_tokens: 2000,
           system,
           tools: [{ type: "web_search_20250305", name: "web_search" }],

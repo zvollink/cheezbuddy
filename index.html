@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CheezBuddy — Find the Best Cheez-It Price</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --orange: #F4711A;
+      --red:    #C8390A;
+      --yellow: #FFD037;
+      --dark:   #0F0F0F;
+      --card:   #181818;
+      --border: #282828;
+      --text:   #FFFFFF;
+      --muted:  #888888;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--dark);
+      color: var(--text);
+      font-family: 'Barlow Condensed', 'Arial Narrow', Arial, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── Hero ────────────────────────────────── */
+    .hero {
+      text-align: center;
+      padding: 72px 24px 56px;
+      border-bottom: 3px solid var(--orange);
+      background: radial-gradient(ellipse 80% 60% at 50% -10%, #2D1100 0%, var(--dark) 70%);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        repeating-linear-gradient(0deg, transparent, transparent 48px, rgba(244,113,26,.05) 48px, rgba(244,113,26,.05) 49px),
+        repeating-linear-gradient(90deg, transparent, transparent 48px, rgba(244,113,26,.05) 48px, rgba(244,113,26,.05) 49px);
+      pointer-events: none;
+    }
+
+    .hero-eyebrow {
+      display: block;
+      font-family: 'Anton', Impact, 'Arial Black', sans-serif;
+      font-size: clamp(22px, 5vw, 58px);
+      color: var(--yellow);
+      letter-spacing: .1em;
+      line-height: 1;
+      position: relative;
+    }
+
+    .hero-title {
+      display: block;
+      font-family: 'Anton', Impact, 'Arial Black', sans-serif;
+      font-size: clamp(76px, 18vw, 220px);
+      color: var(--orange);
+      line-height: .86;
+      letter-spacing: -.01em;
+      text-shadow: 5px 5px 0 var(--red), 10px 10px 0 rgba(200,57,10,.25);
+      margin: 10px 0 32px;
+      position: relative;
+    }
+
+    .hero-sub {
+      font-size: clamp(15px, 2.2vw, 19px);
+      color: var(--muted);
+      max-width: 500px;
+      margin: 0 auto 40px;
+      line-height: 1.55;
+      position: relative;
+    }
+
+    .cta {
+      display: inline-block;
+      background: var(--orange);
+      color: #fff;
+      border: none;
+      padding: 20px 56px;
+      font-family: 'Anton', Impact, sans-serif;
+      font-size: 22px;
+      letter-spacing: .1em;
+      cursor: pointer;
+      clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+      transition: background .15s, transform .15s;
+      position: relative;
+    }
+    .cta:hover  { background: var(--red); transform: scale(1.04); }
+    .cta:active { transform: scale(.98); }
+    .cta:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+    .loader {
+      margin-top: 24px;
+      font-size: 13px;
+      color: var(--orange);
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      animation: blink 1.4s ease-in-out infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:.35} 50%{opacity:1} }
+
+    .last-updated {
+      margin-top: 14px;
+      font-size: 11px;
+      color: #3A3A3A;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+    }
+
+    /* ── Results ─────────────────────────────── */
+    .results {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 48px 20px 72px;
+    }
+
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      gap: 14px;
+    }
+
+    .results-count { font-size: 22px; font-weight: 700; letter-spacing: .02em; }
+    .results-sub   { font-size: 11px; color: #444; letter-spacing: .1em; text-transform: uppercase; margin-top: 5px; }
+
+    .sort-bar  { display: flex; align-items: center; gap: 8px; }
+    .sort-label { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: .1em; }
+
+    .sort-btn {
+      background: transparent;
+      border: 1px solid #2E2E2E;
+      color: #666;
+      padding: 6px 14px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      letter-spacing: .05em;
+      transition: all .15s;
+    }
+    .sort-btn:hover  { border-color: #555; color: #aaa; }
+    .sort-btn.active { border-color: var(--orange); color: var(--orange); }
+
+    /* ── Grid ────────────────────────────────── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 22px;
+      position: relative;
+      transition: border-color .2s, transform .2s;
+    }
+    .card:hover { border-color: #3A3A3A; transform: translateY(-2px); }
+    .card.best  { border: 2px solid var(--orange); }
+
+    .card-badge {
+      position: absolute;
+      top: -11px;
+      left: 16px;
+      background: var(--orange);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 4px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .card-retailer { font-size: 21px; font-weight: 700; letter-spacing: .02em; margin-bottom: 3px; }
+    .card-size     { font-size: 13px; color: var(--muted); margin-bottom: 18px; }
+
+    .card-price-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 12px; }
+    .card-price {
+      font-family: 'Anton', Impact, sans-serif;
+      font-size: 38px;
+      color: var(--yellow);
+      line-height: 1;
+    }
+    .card-peroz { font-size: 14px; color: var(--muted); }
+
+    .card-stock {
+      display: inline-block;
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 4px;
+      margin-bottom: 14px;
+      letter-spacing: .05em;
+    }
+    .in-stock  { background: #0D2B0D; color: #5DD85D; }
+    .out-stock { background: #2B0D0D; color: #F44336; }
+
+    .card-link {
+      display: inline-block;
+      color: var(--orange);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .05em;
+      border-bottom: 1px solid transparent;
+      transition: border-color .2s;
+    }
+    .card-link:hover { border-bottom-color: var(--orange); }
+
+    /* ── Error ───────────────────────────────── */
+    .error-box {
+      background: #1C0808;
+      border: 1px solid #4A1A1A;
+      border-radius: 8px;
+      padding: 32px;
+      text-align: center;
+      color: #FF6B6B;
+      font-size: 16px;
+      max-width: 540px;
+      margin: 40px auto;
+      line-height: 1.6;
+    }
+
+    /* ── Footer ──────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 28px 20px;
+      border-top: 1px solid #181818;
+      font-size: 11px;
+      color: #2E2E2E;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Hero -->
+  <div class="hero">
+    <span class="hero-eyebrow">WANT IT &nbsp;·&nbsp; NEED IT</span>
+    <h1 class="hero-title">CHEEZ IT</h1>
+    <p class="hero-sub">
+      The GasBuddy of the snack aisle. Live prices from major retailers —
+      find your fix at the lowest cost per ounce.
+    </p>
+    <button class="cta" id="findBtn" onclick="findPrices()">FIND THE LOWEST PRICE</button>
+    <p class="loader" id="loader" style="display:none">Scanning the snack aisle...</p>
+    <p class="last-updated" id="lastUpdated"></p>
+  </div>
+
+  <!-- Results -->
+  <main class="results" id="results" style="display:none">
+    <div class="results-header">
+      <div>
+        <div class="results-count" id="resultCount"></div>
+        <div class="results-sub">Sorted by best value (price per oz)</div>
+      </div>
+      <div class="sort-bar">
+        <span class="sort-label">Sort:</span>
+        <button class="sort-btn active" onclick="setSort('pricePerOz', this)">$/oz</button>
+        <button class="sort-btn"        onclick="setSort('price', this)">Total $</button>
+        <button class="sort-btn"        onclick="setSort('retailer', this)">Name</button>
+      </div>
+    </div>
+    <div class="grid" id="grid"></div>
+  </main>
+
+  <div class="error-box" id="errorBox" style="display:none"></div>
+
+  <footer>CheezBuddy &nbsp;·&nbsp; Prices fetched live via AI web search &nbsp;·&nbsp; Not affiliated with Cheez-It® or Kellanova</footer>
+
+  <script>
+    let allPrices   = [];
+    let currentSort = 'pricePerOz';
+    let loaderInterval;
+
+    const loadingMsgs = [
+      'Scouring the snack aisle...',
+      "Interrogating Walmart's cheese dept...",
+      'Running the cracker math...',
+      'Comparing cheesy deals...',
+      'Calculating $/oz...',
+      'Almost there, hold tight...',
+    ];
+
+    function setSort(key, btn) {
+      currentSort = key;
+      document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderCards();
+    }
+
+    function renderCards() {
+      const sorted = [...allPrices].sort((a, b) => {
+        if (currentSort === 'pricePerOz') return (a.pricePerOz || 999) - (b.pricePerOz || 999);
+        if (currentSort === 'price')      return (a.price || 999) - (b.price || 999);
+        return (a.retailer || '').localeCompare(b.retailer || '');
+      });
+
+      document.getElementById('resultCount').textContent = sorted.length + ' retailers found';
+      document.getElementById('grid').innerHTML = sorted.map((item, i) => {
+        const isBest = i === 0 && currentSort === 'pricePerOz';
+        return `
+          <div class="card${isBest ? ' best' : ''}">
+            ${isBest ? '<div class="card-badge">🏆 Best Value</div>' : ''}
+            <div class="card-retailer">${escHtml(item.retailer || 'Unknown')}</div>
+            <div class="card-size">${escHtml(item.size || '')}</div>
+            <div class="card-price-row">
+              <span class="card-price">$${parseFloat(item.price || 0).toFixed(2)}</span>
+              ${item.pricePerOz
+                ? `<span class="card-peroz">$${parseFloat(item.pricePerOz).toFixed(2)}/oz</span>`
+                : ''}
+            </div>
+            <div class="card-stock ${item.inStock ? 'in-stock' : 'out-stock'}">
+              ${item.inStock ? '✓ In Stock' : '✗ Out of Stock'}
+            </div>
+            ${item.url
+              ? `<a class="card-link" href="${escHtml(item.url)}" target="_blank" rel="noopener noreferrer">Buy now →</a>`
+              : ''}
+          </div>`;
+      }).join('');
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    async function findPrices() {
+      const btn    = document.getElementById('findBtn');
+      const loader = document.getElementById('loader');
+      const errBox = document.getElementById('errorBox');
+
+      btn.disabled = true;
+      errBox.style.display    = 'none';
+      document.getElementById('results').style.display = 'none';
+      loader.style.display = 'block';
+
+      let mi = 0;
+      loader.textContent = loadingMsgs[0];
+      loaderInterval = setInterval(() => {
+        mi = (mi + 1) % loadingMsgs.length;
+        loader.textContent = loadingMsgs[mi];
+      }, 2400);
+
+      try {
+        const res = await fetch('/.netlify/functions/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.error || `Server error ${res.status}`);
+        if (!Array.isArray(data) || data.length === 0) throw new Error('No price data returned');
+
+        allPrices = data;
+        renderCards();
+        document.getElementById('results').style.display = 'block';
+        document.getElementById('lastUpdated').textContent =
+          'Last updated: ' + new Date().toLocaleTimeString();
+
+      } catch (e) {
+        errBox.textContent =
+          '🧀 The cheese got away: ' + e.message +
+          ' — check your API key in Netlify env vars, then try again.';
+        errBox.style.display = 'block';
+      } finally {
+        clearInterval(loaderInterval);
+        loader.style.display = 'none';
+        btn.disabled    = false;
+        btn.textContent = 'REFRESH PRICES';
+      }
+    }
+  </script>
+</body>
+</html>

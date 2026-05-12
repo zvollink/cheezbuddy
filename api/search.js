@@ -1,27 +1,14 @@
-exports.handler = async function (event) {
-  if (event.httpMethod === "OPTIONS") {
-    return {
-      statusCode: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-      },
-      body: "",
-    };
-  }
+module.exports = async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
   if (!ANTHROPIC_API_KEY) {
-    return {
-      statusCode: 500,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "ANTHROPIC_API_KEY environment variable is not set" }),
-    };
+    return res.status(500).json({ error: "ANTHROPIC_API_KEY environment variable is not set" });
   }
 
   const system = `You are a price comparison assistant. Search for current Cheez-It Original crackers prices at major US retailers.
@@ -41,7 +28,7 @@ Find at least 6 retailers. Always include Walmart, Target, Amazon if available. 
     let result = null;
 
     for (let round = 0; round < 8 && !result; round++) {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const apiRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -58,12 +45,12 @@ Find at least 6 retailers. Always include Walmart, Target, Amazon if available. 
         }),
       });
 
-      if (!res.ok) {
-        const errBody = await res.text();
-        throw new Error(`Anthropic API returned ${res.status}: ${errBody}`);
+      if (!apiRes.ok) {
+        const errBody = await apiRes.text();
+        throw new Error(`Anthropic API returned ${apiRes.status}: ${errBody}`);
       }
 
-      const data = await res.json();
+      const data = await apiRes.json();
 
       if (data.stop_reason === "end_turn") {
         const text = (data.content || [])
@@ -90,8 +77,7 @@ Find at least 6 retailers. Always include Walmart, Target, Amazon if available. 
             content: serverToolResults.map((r, idx) => ({
               type: "tool_result",
               tool_use_id: r.tool_use_id || (toolUses[idx] && toolUses[idx].id),
-              content:
-                typeof r.content === "string" ? r.content : JSON.stringify(r.content),
+              content: typeof r.content === "string" ? r.content : JSON.stringify(r.content),
             })),
           });
         } else {
@@ -112,23 +98,9 @@ Find at least 6 retailers. Always include Walmart, Target, Amazon if available. 
     const parsed = JSON.parse(result);
     if (!Array.isArray(parsed)) throw new Error("Response was not a JSON array");
 
-    return {
-      statusCode: 200,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
-      body: JSON.stringify(parsed),
-    };
+    return res.status(200).json(parsed);
   } catch (e) {
     console.error("CheezBuddy search error:", e);
-    return {
-      statusCode: 500,
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Allow-Origin": "*",
-      },
-      body: JSON.stringify({ error: e.message }),
-    };
+    return res.status(500).json({ error: e.message });
   }
 };

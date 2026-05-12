@@ -341,6 +341,25 @@
         .replace(/"/g, '&quot;');
     }
 
+    async function getLocation() {
+      try {
+        const pos = await new Promise((resolve, reject) =>
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+        );
+        const r = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${pos.coords.latitude}&lon=${pos.coords.longitude}&format=json`,
+          { headers: { 'Accept-Language': 'en' } }
+        );
+        const geo = await r.json();
+        return {
+          city: geo.address?.city || geo.address?.town || geo.address?.village || '',
+          state: geo.address?.state || '',
+        };
+      } catch {
+        return {};
+      }
+    }
+
     async function findPrices() {
       const btn    = document.getElementById('findBtn');
       const loader = document.getElementById('loader');
@@ -350,19 +369,25 @@
       errBox.style.display    = 'none';
       document.getElementById('results').style.display = 'none';
       loader.style.display = 'block';
+      loader.textContent = 'Detecting your location...';
 
       let mi = 0;
-      loader.textContent = loadingMsgs[0];
       loaderInterval = setInterval(() => {
         mi = (mi + 1) % loadingMsgs.length;
         loader.textContent = loadingMsgs[mi];
       }, 2400);
 
       try {
+        const location = await getLocation();
+        if (location.city) {
+          document.getElementById('lastUpdated').textContent =
+            'Showing stores near ' + location.city + ', ' + location.state;
+        }
+
         const res = await fetch('/api/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify(location),
         });
 
         const data = await res.json();
@@ -373,8 +398,11 @@
         allPrices = data;
         renderCards();
         document.getElementById('results').style.display = 'block';
-        document.getElementById('lastUpdated').textContent =
-          'Last updated: ' + new Date().toLocaleTimeString();
+        const timeStr = 'Prices as of ' + new Date().toLocaleTimeString();
+        const locEl = document.getElementById('lastUpdated');
+        if (!locEl.textContent.startsWith('Showing')) {
+          locEl.textContent = timeStr;
+        }
 
       } catch (e) {
         errBox.textContent =

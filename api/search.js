@@ -10,6 +10,17 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: "ANTHROPIC_API_KEY environment variable is not set" });
   }
 
+  let location = "the US";
+  try {
+    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
+    if (body.city && body.state) location = `${body.city}, ${body.state}`;
+    else if (body.city) location = body.city;
+  } catch {}
+
+  const locationPrompt = location !== "the US"
+    ? `The user is located in ${location}. Include national chains AND any regional grocery chains common to that area (e.g. for Michigan: Meijer, Family Fare, Gordon Food Service; for the South: Publix, Winn-Dixie; for the Northeast: Stop & Shop, ShopRite; etc.).`
+    : `Include a broad mix of national chains: Walmart, Target, Amazon, Kroger, Costco, Sam's Club, Meijer, Publix.`;
+
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -24,17 +35,19 @@ module.exports = async function handler(req, res) {
         messages: [
           {
             role: "user",
-            content: `Return a JSON array of Cheez-It Original cracker prices at major US retailers based on your training knowledge. Include Walmart, Target, Amazon, Kroger, Costco, Sam's Club, and Meijer. Use realistic current US retail prices. Output ONLY the raw JSON array, nothing else — no markdown, no explanation.
+            content: `Return a JSON array of Cheez-It Original cracker prices at major retailers based on your training knowledge. ${locationPrompt}
+
+Output ONLY the raw JSON array — no markdown, no explanation, no backticks.
 
 Each object must have exactly these keys:
 - retailer: string
-- price: number (USD)
+- price: number (USD, realistic current US retail price)
 - size: string (e.g. "21 oz")
 - pricePerOz: number (price divided by oz, rounded to 3 decimals)
-- url: string (direct product search URL for that retailer)
-- inStock: boolean (true unless you have reason to think otherwise)
+- url: string (direct product search URL for that retailer, e.g. https://www.walmart.com/search?q=cheez-it+original)
+- inStock: boolean
 
-Sort by pricePerOz ascending.`,
+Sort by pricePerOz ascending. Include 6–9 retailers.`,
           },
         ],
       }),
